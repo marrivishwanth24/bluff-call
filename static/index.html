@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Bluff Call</title>
+<meta name="description" content="A real-time multiplayer bluffing game about programming trivia. Join with a room code, no login, no install.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#14112B;--bg2:#1B1740;--card:#211C4D;--card-hover:#2A2460;
+  --coral:#FF4D6D;--coral2:#E8365A;--coral-tint:rgba(255,77,109,0.12);
+  --gold:#FFC857;--gold-tint:rgba(255,200,87,0.14);
+  --mint:#4ADE80;--mint-tint:rgba(74,222,128,0.12);
+  --text:#F5F3FF;--text2:#B3ACD6;--muted:#6C639E;
+  --border:rgba(255,255,255,0.08);--border-accent:rgba(255,77,109,0.3);
+  --display:'Fredoka',sans-serif;--body:'Manrope',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%}
+body{
+  background:radial-gradient(circle at 20% 0%, #241F58 0%, var(--bg) 55%);
+  color:var(--text);font-family:var(--body);min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  padding:24px 16px 60px;line-height:1.5;
+}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--coral2);border-radius:2px}
+
+.wrap{width:100%;max-width:520px}
+
+/* ---- header ---- */
+.brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:28px}
+.brand-mark{font-size:26px}
+.brand h1{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:-0.01em}
+
+.screen{display:none}
+.screen.active{display:block;animation:fadein .25s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px;box-shadow:0 12px 32px rgba(0,0,0,0.25)}
+
+/* ---- join screen ---- */
+label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+input[type=text]{
+  width:100%;background:var(--bg2);border:2px solid var(--border);border-radius:12px;
+  padding:14px 16px;color:var(--text);font-family:var(--body);font-weight:600;font-size:16px;
+  transition:border-color .15s;
+}
+input[type=text]:focus{outline:none;border-color:var(--coral)}
+input[type=text]::placeholder{color:var(--muted);font-weight:500}
+.field{margin-bottom:16px}
+.room-code-input{font-family:var(--mono);letter-spacing:0.15em;text-transform:uppercase;text-align:center;font-size:20px}
+
+.btn{
+  width:100%;font-family:var(--display);font-weight:600;font-size:17px;padding:15px 20px;
+  border-radius:12px;border:none;cursor:pointer;transition:all .15s;color:#1A0E13;
+}
+.btn-coral{background:linear-gradient(135deg,var(--coral),var(--coral2));color:#fff}
+.btn-coral:hover{transform:translateY(-1px);box-shadow:0 8px 20px var(--coral-tint)}
+.btn-coral:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-ghost{background:transparent;border:2px solid var(--border);color:var(--text2)}
+.btn-ghost:hover{border-color:var(--text2);color:var(--text)}
+.divider{display:flex;align-items:center;gap:12px;margin:22px 0;color:var(--muted);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.error-banner{
+  background:var(--coral-tint);border:1px solid var(--border-accent);color:#FFB3C1;
+  padding:12px 16px;border-radius:10px;font-size:13.5px;margin-bottom:16px;display:none;
+}
+.error-banner.show{display:block}
+
+/* ---- lobby ---- */
+.room-code-display{text-align:center;margin-bottom:22px}
+.room-code-label{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px}
+.room-code-big{font-family:var(--mono);font-size:40px;font-weight:700;letter-spacing:0.12em;color:var(--gold)}
+.player-list{display:flex;flex-direction:column;gap:8px;margin:20px 0}
+.player-row{display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border-radius:10px;padding:11px 15px;font-weight:600}
+.player-row .score{font-family:var(--mono);color:var(--gold);font-size:13px}
+.player-row .offline{color:var(--muted);font-weight:400;font-size:12px}
+.hint{text-align:center;color:var(--text2);font-size:13px;margin-top:14px}
+
+/* ---- writing / voting shared ---- */
+.round-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.round-pill{font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg2);padding:5px 11px;border-radius:100px}
+.timer{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold)}
+.timer.urgent{color:var(--coral);animation:pulse .6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.question-text{font-family:var(--display);font-size:21px;font-weight:600;line-height:1.35;margin-bottom:22px;text-wrap:balance}
+.progress-text{text-align:center;font-size:12.5px;color:var(--muted);margin-top:14px}
+
+textarea{
+  width:100%;background:var(--bg2);border:2px solid var(--border);border-radius:12px;
+  padding:14px 16px;color:var(--text);font-family:var(--body);font-weight:500;font-size:15.5px;
+  resize:none;min-height:90px;transition:border-color .15s;
+}
+textarea:focus{outline:none;border-color:var(--coral)}
+.submitted-note{text-align:center;color:var(--mint);font-size:13.5px;margin-top:14px;font-weight:600}
+
+.option-list{display:flex;flex-direction:column;gap:10px}
+.option-card{
+  background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:15px 18px;
+  cursor:pointer;font-size:15px;font-weight:500;transition:all .12s;
+}
+.option-card:hover{border-color:var(--coral);background:var(--card-hover)}
+.option-card.selected{border-color:var(--coral);background:var(--coral-tint)}
+.option-card.disabled{opacity:0.5;cursor:not-allowed}
+
+/* ---- reveal ---- */
+.reveal-question{font-family:var(--display);font-size:18px;font-weight:600;margin-bottom:16px;color:var(--text2)}
+.reveal-option{
+  border-radius:12px;padding:14px 16px;margin-bottom:9px;border:2px solid var(--border);background:var(--bg2);
+}
+.reveal-option.is-real{border-color:var(--mint);background:var(--mint-tint)}
+.reveal-option-text{font-weight:600;font-size:14.5px;margin-bottom:4px}
+.reveal-option-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:10px}
+.reveal-option.is-real .reveal-option-meta{color:var(--mint)}
+.score-delta{text-align:center;margin:20px 0 6px;font-family:var(--display);font-size:15px;color:var(--gold)}
+.scoreboard{margin-top:18px;border-top:1px dashed var(--border);padding-top:16px}
+
+/* ---- game over ---- */
+.winner-banner{text-align:center;margin-bottom:24px}
+.winner-emoji{font-size:48px;margin-bottom:10px}
+.winner-name{font-family:var(--display);font-size:26px;font-weight:700;color:var(--gold)}
+.rank-row{display:flex;align-items:center;gap:12px;background:var(--bg2);border-radius:10px;padding:13px 16px;margin-bottom:8px}
+.rank-num{font-family:var(--mono);font-weight:700;color:var(--muted);width:20px}
+.rank-row:first-child .rank-num{color:var(--gold)}
+.rank-name{flex:1;font-weight:600}
+.rank-score{font-family:var(--mono);color:var(--text2)}
+
+footer{margin-top:30px;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand"><span class="brand-mark">🎭</span><h1>Bluff Call</h1></div>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+  <!-- JOIN SCREEN -->
+  <section class="screen active" id="screen-join">
+    <div class="card">
+      <div class="field">
+        <label>Your name</label>
+        <input type="text" id="nameInput" placeholder="What should we call you?" maxlength="24" />
+      </div>
+      <button class="btn btn-coral" onclick="handleCreateRoom()">Create a room →</button>
+      <div class="divider">or join one</div>
+      <div class="field">
+        <label>Room code</label>
+        <input type="text" id="codeInput" class="room-code-input" placeholder="ABCDE" maxlength="5" />
+      </div>
+      <button class="btn btn-ghost" onclick="handleJoinRoom()">Join room</button>
+    </div>
+  </section>
+
+  <!-- LOBBY SCREEN -->
+  <section class="screen" id="screen-lobby">
+    <div class="card">
+      <div class="room-code-display">
+        <div class="room-code-label">Room code — share this</div>
+        <div class="room-code-big" id="lobbyCode">—</div>
+      </div>
+      <div class="player-list" id="lobbyPlayers"></div>
+      <button class="btn btn-coral" id="startBtn" onclick="handleStartGame()" style="display:none">Start game →</button>
+      <div class="hint" id="lobbyHint">Waiting for the host to start…</div>
+    </div>
+  </section>
+
+  <!-- WRITING SCREEN -->
+  <section class="screen" id="screen-writing">
+    <div class="card">
+      <div class="round-meta">
+        <span class="round-pill" id="writingRoundPill">Round 1/8</span>
+        <span class="timer" id="writingTimer">45</span>
+      </div>
+      <div class="question-text" id="writingQuestion">—</div>
+      <label>Write a convincing (fake) answer</label>
+      <textarea id="bluffInput" maxlength="200" placeholder="Make it believable…"></textarea>
+      <button class="btn btn-coral" id="bluffSubmitBtn" onclick="handleSubmitBluff()" style="margin-top:14px">Lock in my answer</button>
+      <div class="submitted-note" id="bluffSubmittedNote" style="display:none">✓ Answer locked in — waiting on others…</div>
+      <div class="progress-text" id="writingProgress"></div>
+    </div>
+  </section>
+
+  <!-- VOTING SCREEN -->
+  <section class="screen" id="screen-voting">
+    <div class="card">
+      <div class="round-meta">
+        <span class="round-pill" id="votingRoundPill">Round 1/8</span>
+        <span class="timer" id="votingTimer">30</span>
+      </div>
+      <div class="question-text" id="votingQuestion">Which one is real?</div>
+      <div class="option-list" id="optionList"></div>
+      <div class="progress-text" id="votingProgress"></div>
+    </div>
+  </section>
+
+  <!-- REVEAL SCREEN -->
+  <section class="screen" id="screen-reveal">
+    <div class="card">
+      <div class="reveal-question" id="revealQuestion">—</div>
+      <div id="revealOptions"></div>
+      <div class="scoreboard" id="revealScoreboard"></div>
+    </div>
+  </section>
+
+  <!-- GAME OVER SCREEN -->
+  <section class="screen" id="screen-gameover">
+    <div class="card">
+      <div class="winner-banner">
+        <div class="winner-emoji">🏆</div>
+        <div class="winner-name" id="winnerName">—</div>
+      </div>
+      <div id="finalRankings"></div>
+      <button class="btn btn-coral" onclick="location.reload()" style="margin-top:18px">Play again</button>
+    </div>
+  </section>
+
+  <footer>Bluff Call — built for the Handshake × OpenAI multiplayer challenge</footer>
+</div>
+
+<script>
+const socket = io({ path: '/socket.io' });
+
+let myName = '';
+let roomCode = '';
+let isHost = false;
+let hasSubmittedBluff = false;
+let selectedOptionIndex = null;
+let countdownTimer = null;
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+function showError(message) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = message;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// ── Join flow ────────────────────────────────────────────────────────────
+
+function handleCreateRoom() {
+  myName = document.getElementById('nameInput').value.trim();
+  if (!myName) return showError('Enter a name first.');
+  socket.emit('create_room', { name: myName });
+}
+
+function handleJoinRoom() {
+  myName = document.getElementById('nameInput').value.trim();
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (!myName) return showError('Enter a name first.');
+  if (!code) return showError('Enter a room code.');
+  socket.emit('join_room_event', { name: myName, code });
+}
+
+socket.on('room_created', (data) => {
+  roomCode = data.code;
+  isHost = true;
+  renderLobby(data);
+  showScreen('lobby');
+});
+
+socket.on('room_joined', (data) => {
+  roomCode = data.code;
+  isHost = (data.host_sid === socket.id);
+  renderLobby(data);
+  showScreen('lobby');
+});
+
+socket.on('room_update', (data) => {
+  if (['lobby'].includes(data.status)) renderLobby(data);
+  updateMiniScoreboardIfPresent(data);
+});
+
+socket.on('game_error', (data) => showError(data.message));
+
+// ── Lobby ────────────────────────────────────────────────────────────────
+
+function renderLobby(data) {
+  document.getElementById('lobbyCode').textContent = data.code;
+  const list = document.getElementById('lobbyPlayers');
+  list.innerHTML = data.players.map(p => `
+    <div class="player-row">
+      <span>${esc(p.name)}${p.connected ? '' : ' <span class="offline">(offline)</span>'}</span>
+    </div>`).join('');
+
+  const startBtn = document.getElementById('startBtn');
+  const hint = document.getElementById('lobbyHint');
+  if (isHost) {
+    startBtn.style.display = 'block';
+    const enough = data.players.filter(p => p.connected).length >= 3;
+    startBtn.disabled = !enough;
+    startBtn.textContent = enough ? 'Start game →' : `Need ${3 - data.players.length} more player(s)`;
+    hint.style.display = 'none';
+  } else {
+    startBtn.style.display = 'none';
+    hint.style.display = 'block';
+  }
+}
+
+function handleStartGame() {
+  socket.emit('start_game_event', {});
+}
+
+function updateMiniScoreboardIfPresent(data) {} // reserved — scores shown on reveal/gameover screens
+
+// ── Writing phase ───────────────────────────────────────────────────────
+
+socket.on('round_started', (data) => {
+  hasSubmittedBluff = false;
+  document.getElementById('writingRoundPill').textContent = `Round ${data.round_num}/${data.total_rounds}`;
+  document.getElementById('writingQuestion').textContent = data.question;
+  document.getElementById('bluffInput').value = '';
+  document.getElementById('bluffInput').disabled = false;
+  document.getElementById('bluffSubmitBtn').style.display = 'block';
+  document.getElementById('bluffSubmittedNote').style.display = 'none';
+  document.getElementById('writingProgress').textContent = '';
+  startCountdown('writingTimer', data.write_seconds);
+  showScreen('writing');
+});
+
+function handleSubmitBluff() {
+  const text = document.getElementById('bluffInput').value.trim();
+  if (!text) return showError('Write something first — even a guess.');
+  socket.emit('submit_bluff_event', { text });
+  hasSubmittedBluff = true;
+  document.getElementById('bluffInput').disabled = true;
+  document.getElementById('bluffSubmitBtn').style.display = 'none';
+  document.getElementById('bluffSubmittedNote').style.display = 'block';
+}
+
+socket.on('writing_progress', (data) => {
+  document.getElementById('writingProgress').textContent = `${data.submitted}/${data.total} answered`;
+});
+
+// ── Voting phase ─────────────────────────────────────────────────────────
+
+socket.on('voting_started', (data) => {
+  selectedOptionIndex = null;
+  document.getElementById('votingProgress').textContent = '';
+  const list = document.getElementById('optionList');
+  list.innerHTML = data.options.map((text, i) => `
+    <div class="option-card" id="opt-${i}" onclick="handleSelectOption(${i})">${esc(text)}</div>
+  `).join('');
+  startCountdown('votingTimer', data.vote_seconds);
+  showScreen('voting');
+});
+
+function handleSelectOption(i) {
+  if (selectedOptionIndex !== null) return; // already voted
+  selectedOptionIndex = i;
+  document.querySelectorAll('.option-card').forEach((el, idx) => {
+    el.classList.toggle('selected', idx === i);
+    el.classList.add('disabled');
+  });
+  socket.emit('submit_vote_event', { option_index: i });
+}
+
+socket.on('voting_progress', (data) => {
+  document.getElementById('votingProgress').textContent = `${data.submitted}/${data.total} voted`;
+});
+
+// ── Reveal ───────────────────────────────────────────────────────────────
+
+socket.on('round_revealed', (data) => {
+  document.getElementById('revealQuestion').textContent = data.question;
+  const optsEl = document.getElementById('revealOptions');
+  optsEl.innerHTML = data.options.map(o => `
+    <div class="reveal-option ${o.is_real ? 'is-real' : ''}">
+      <div class="reveal-option-text">${esc(o.text)}</div>
+      <div class="reveal-option-meta">
+        <span>${o.is_real ? '✓ The real answer' : (o.author_name ? `by ${esc(o.author_name)}` : 'no author')}</span>
+        <span>${o.votes} vote${o.votes === 1 ? '' : 's'}</span>
+      </div>
+    </div>
+  `).join('');
+
+  const sb = document.getElementById('revealScoreboard');
+  const sorted = [...data.players].sort((a, b) => b.score - a.score);
+  sb.innerHTML = '<div class="score-delta">Scoreboard</div>' + sorted.map(p => `
+    <div class="rank-row"><span class="rank-name">${esc(p.name)}</span><span class="rank-score">${p.score}</span></div>
+  `).join('');
+
+  showScreen('reveal');
+});
+
+// ── Game over ────────────────────────────────────────────────────────────
+
+socket.on('game_over', (data) => {
+  const [winner, ...rest] = data.rankings;
+  document.getElementById('winnerName').textContent = winner ? winner.name : '—';
+  const el = document.getElementById('finalRankings');
+  el.innerHTML = data.rankings.map((p, i) => `
+    <div class="rank-row"><span class="rank-num">#${i + 1}</span><span class="rank-name">${esc(p.name)}</span><span class="rank-score">${p.score}</span></div>
+  `).join('');
+  showScreen('gameover');
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+function startCountdown(elId, seconds) {
+  clearInterval(countdownTimer);
+  let remaining = seconds;
+  const el = document.getElementById(elId);
+  el.textContent = remaining;
+  el.classList.remove('urgent');
+  countdownTimer = setInterval(() => {
+    remaining -= 1;
+    el.textContent = Math.max(remaining, 0);
+    if (remaining <= 10) el.classList.add('urgent');
+    if (remaining <= 0) clearInterval(countdownTimer);
+  }, 1000);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+// Prefill room code from a ?room= URL param, for shareable join links
+const params = new URLSearchParams(location.search);
+if (params.get('room')) document.getElementById('codeInput').value = params.get('room').toUpperCase();
+</script>
+</body>
+</html>
