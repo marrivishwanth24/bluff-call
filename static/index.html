@@ -131,9 +131,40 @@ textarea:focus{outline:none;border-color:var(--coral)}
 
 footer{margin-top:30px;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
 footer a{color:var(--muted)}
+
+/* ---- avatars ---- */
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;color:#fff;font-family:var(--display);font-weight:700;font-size:11px;flex-shrink:0;text-shadow:0 1px 2px rgba(0,0,0,0.35)}
+
+/* ---- countdown ring ---- */
+.timer-ring-wrap{position:relative;width:52px;height:52px;flex-shrink:0}
+.timer-ring{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-track{fill:none;stroke:var(--border);stroke-width:5}
+.ring-progress{fill:none;stroke:var(--gold);stroke-width:5;stroke-linecap:round;stroke-dasharray:163.36;stroke-dashoffset:0}
+.ring-progress.urgent{stroke:var(--coral)}
+.ring-number{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--gold)}
+.ring-number.urgent{color:var(--coral);animation:pulse .6s infinite}
+
+/* ---- voting option badges ---- */
+.option-card{display:flex;align-items:center;gap:12px}
+.opt-badge{flex-shrink:0;width:26px;height:26px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:12px;color:var(--text2);border:1px solid var(--border);transition:all .12s}
+.option-card.selected .opt-badge{background:var(--coral);color:#fff;border-color:var(--coral)}
+.opt-text{flex:1}
+
+/* ---- score deltas ---- */
+.delta-pill{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--mint);background:var(--mint-tint);padding:3px 9px;border-radius:100px;white-space:nowrap}
+
+/* ---- winner bounce ---- */
+.winner-emoji{animation:bounce 0.9s ease-in-out infinite alternate}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-10px)}}
+
+/* ---- confetti ---- */
+#confettiLayer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:999}
+.confetti-piece{position:absolute;top:-12px;width:8px;height:14px;opacity:0.9;border-radius:2px;animation:confetti-fall linear forwards}
+@keyframes confetti-fall{to{transform:translateY(105vh) rotate(360deg);opacity:0.2}}
 </style>
 </head>
 <body>
+<div id="confettiLayer"></div>
 <div class="wrap">
 
   <div class="brand"><span class="brand-mark">🎭</span><h1>Bluff Call</h1></div>
@@ -175,7 +206,13 @@ footer a{color:var(--muted)}
     <div class="card">
       <div class="round-meta">
         <span class="round-pill" id="writingRoundPill">Round 1/8</span>
-        <span class="timer" id="writingTimer">45</span>
+        <div class="timer-ring-wrap">
+          <svg class="timer-ring" viewBox="0 0 60 60">
+            <circle class="ring-track" cx="30" cy="30" r="26"></circle>
+            <circle class="ring-progress" id="writingRingProgress" cx="30" cy="30" r="26"></circle>
+          </svg>
+          <span class="ring-number" id="writingTimer">45</span>
+        </div>
       </div>
       <div class="question-text" id="writingQuestion">—</div>
       <label>Write a convincing (fake) answer</label>
@@ -191,7 +228,13 @@ footer a{color:var(--muted)}
     <div class="card">
       <div class="round-meta">
         <span class="round-pill" id="votingRoundPill">Round 1/8</span>
-        <span class="timer" id="votingTimer">30</span>
+        <div class="timer-ring-wrap">
+          <svg class="timer-ring" viewBox="0 0 60 60">
+            <circle class="ring-track" cx="30" cy="30" r="26"></circle>
+            <circle class="ring-progress" id="votingRingProgress" cx="30" cy="30" r="26"></circle>
+          </svg>
+          <span class="ring-number" id="votingTimer">30</span>
+        </div>
       </div>
       <div class="question-text" id="votingQuestion">Which one is real?</div>
       <div class="option-list" id="optionList"></div>
@@ -289,7 +332,7 @@ function renderLobby(data) {
   const list = document.getElementById('lobbyPlayers');
   list.innerHTML = data.players.map(p => `
     <div class="player-row">
-      <span>${esc(p.name)}${p.connected ? '' : ' <span class="offline">(offline)</span>'}</span>
+      <span style="display:flex;align-items:center;gap:10px">${avatarHTML(p.name)}${esc(p.name)}${p.connected ? '' : ' <span class="offline">(offline)</span>'}</span>
     </div>`).join('');
 
   const startBtn = document.getElementById('startBtn');
@@ -323,7 +366,7 @@ socket.on('round_started', (data) => {
   document.getElementById('bluffSubmitBtn').style.display = 'block';
   document.getElementById('bluffSubmittedNote').style.display = 'none';
   document.getElementById('writingProgress').textContent = '';
-  startCountdown('writingTimer', data.write_seconds);
+  startCountdown('writing', data.write_seconds);
   showScreen('writing');
 });
 
@@ -346,11 +389,14 @@ socket.on('writing_progress', (data) => {
 socket.on('voting_started', (data) => {
   selectedOptionIndex = null;
   document.getElementById('votingProgress').textContent = '';
+  const letters = 'ABCDEFGH';
   const list = document.getElementById('optionList');
   list.innerHTML = data.options.map((text, i) => `
-    <div class="option-card" id="opt-${i}" onclick="handleSelectOption(${i})">${esc(text)}</div>
+    <div class="option-card" id="opt-${i}" onclick="handleSelectOption(${i})">
+      <span class="opt-badge">${letters[i] || i + 1}</span><span class="opt-text">${esc(text)}</span>
+    </div>
   `).join('');
-  startCountdown('votingTimer', data.vote_seconds);
+  startCountdown('voting', data.vote_seconds);
   showScreen('voting');
 });
 
@@ -383,13 +429,29 @@ socket.on('round_revealed', (data) => {
     </div>
   `).join('');
 
+  // Per-player score deltas for this round, derived the same way the server
+  // scores it: +1000 for a correct guess, +500 per person fooled.
+  const deltas = {};
+  (data.correct_voters || []).forEach(name => { deltas[name] = (deltas[name] || 0) + 1000; });
+  data.options.forEach(o => {
+    if (!o.is_real && o.author_name && o.votes > 0) {
+      deltas[o.author_name] = (deltas[o.author_name] || 0) + o.votes * 500;
+    }
+  });
+
   const sb = document.getElementById('revealScoreboard');
   const sorted = [...data.players].sort((a, b) => b.score - a.score);
   sb.innerHTML = '<div class="score-delta">Scoreboard</div>' + sorted.map(p => `
-    <div class="rank-row"><span class="rank-name">${esc(p.name)}</span><span class="rank-score">${p.score}</span></div>
+    <div class="rank-row">
+      ${avatarHTML(p.name)}
+      <span class="rank-name">${esc(p.name)}</span>
+      ${deltas[p.name] ? `<span class="delta-pill">+${deltas[p.name]}</span>` : ''}
+      <span class="rank-score">${p.score}</span>
+    </div>
   `).join('');
 
   showScreen('reveal');
+  burstConfetti(35);
 });
 
 // ── Game over ────────────────────────────────────────────────────────────
@@ -399,23 +461,42 @@ socket.on('game_over', (data) => {
   document.getElementById('winnerName').textContent = winner ? winner.name : '—';
   const el = document.getElementById('finalRankings');
   el.innerHTML = data.rankings.map((p, i) => `
-    <div class="rank-row"><span class="rank-num">#${i + 1}</span><span class="rank-name">${esc(p.name)}</span><span class="rank-score">${p.score}</span></div>
+    <div class="rank-row">
+      <span class="rank-num">#${i + 1}</span>
+      ${avatarHTML(p.name)}
+      <span class="rank-name">${esc(p.name)}</span>
+      <span class="rank-score">${p.score}</span>
+    </div>
   `).join('');
   showScreen('gameover');
+  burstConfetti(90);
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function startCountdown(elId, seconds) {
+function startCountdown(prefix, seconds) {
   clearInterval(countdownTimer);
+  const RING_CIRCUMFERENCE = 163.36;
+  const num = document.getElementById(prefix + 'Timer');
+  const ring = document.getElementById(prefix + 'RingProgress');
   let remaining = seconds;
-  const el = document.getElementById(elId);
-  el.textContent = remaining;
-  el.classList.remove('urgent');
+
+  num.textContent = remaining;
+  num.classList.remove('urgent');
+  ring.classList.remove('urgent');
+  ring.style.transition = 'none';
+  ring.style.strokeDashoffset = '0';
+  // force a reflow so the browser applies the reset before animating
+  ring.getBoundingClientRect();
+  requestAnimationFrame(() => {
+    ring.style.transition = `stroke-dashoffset ${seconds}s linear`;
+    ring.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
+  });
+
   countdownTimer = setInterval(() => {
     remaining -= 1;
-    el.textContent = Math.max(remaining, 0);
-    if (remaining <= 10) el.classList.add('urgent');
+    num.textContent = Math.max(remaining, 0);
+    if (remaining <= 10) { num.classList.add('urgent'); ring.classList.add('urgent'); }
     if (remaining <= 0) clearInterval(countdownTimer);
   }, 1000);
 }
@@ -424,6 +505,35 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
+}
+
+function hashHue(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+function avatarHTML(name) {
+  const safe = (name || '?').trim();
+  const hue = hashHue(safe);
+  const initials = safe.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+  return `<span class="avatar" style="background:hsl(${hue},65%,50%)">${esc(initials)}</span>`;
+}
+
+function burstConfetti(count) {
+  const colors = ['#FF4D6D', '#FFC857', '#4ADE80', '#8B7FFF', '#5FD4FF'];
+  const layer = document.getElementById('confettiLayer');
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDuration = (2 + Math.random() * 1.5) + 's';
+    el.style.animationDelay = (Math.random() * 0.3) + 's';
+    el.style.transform = `rotate(${Math.random() * 360}deg)`;
+    layer.appendChild(el);
+    setTimeout(() => el.remove(), 4200);
+  }
 }
 
 // Prefill room code from a ?room= URL param, for shareable join links
